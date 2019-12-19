@@ -74,7 +74,7 @@ plt.legend()
 plt.show()
 ```
 
-![example 1 image](https://raw.githubusercontent.com/pauloburke/CBSA/docs/images/example_1.png)
+![example 1 image](docs/images/example_1.png)
 
 
 License
