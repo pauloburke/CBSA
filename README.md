@@ -34,11 +34,11 @@ CBSA
 
 Consider the following reaction system:
 
-![equation](https://latex.codecogs.com/gif.latex?%5CLARGE%20A%20%5Cleftrightarrow%20B%20%5Crightarrow%20C)
+![equation](https://latex.codecogs.com/gif.latex?S%20A%20%5Cleftrightarrow%20B%20%5Crightarrow%20C)
 
 Using the Constrain-Based Modeling, the Stoichiometric becomes:
 
-![equation](https://latex.codecogs.com/gif.latex?%5CLARGE%20S%20%3D%20%5Cbegin%7Bbmatrix%7D%20-1%20%26%201%20%26%200%20%5C%5C%201%20%26%20-1%20%26%20-1%20%5C%5C%200%20%26%200%20%26%201%20%5Cend%7Bbmatrix%7D)
+![equation](https://latex.codecogs.com/gif.latex?S%20S%20%3D%20%5Cbegin%7Bbmatrix%7D%20-1%20%26%201%20%26%200%20%5C%5C%201%20%26%20-1%20%26%20-1%20%5C%5C%200%20%26%200%20%26%201%20%5Cend%7Bbmatrix%7D)
 
 A sample code to simulate such system is:
 
