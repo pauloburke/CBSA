@@ -80,7 +80,7 @@ plt.show()
 License
 -------
 
-GillesPy2 is licensed under the MIT License.  Please see the file [LICENCE](LICENSE) for more information.
+CBSA is licensed under the MIT License.  Please see the file [LICENCE](LICENSE) for more information.
 
 
 
