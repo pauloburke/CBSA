@@ -1,7 +1,6 @@
 #Constraint-Based Simulation Algorithm (CBSA)
 
-CBSA is a Python package for 
-<table><tr><td><b>
+CBSA is a Python package for simulation of biochemical systems using the Constraint-Based Simulation Algorithm.
 
 
 [![PyPI](https://img.shields.io/pypi/v/cbsa.svg?color=b44e48)](https://pypi.org/project/cbsa)
