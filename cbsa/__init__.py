@@ -1,1 +1,1 @@
-from cbsa import ReactionSystem
+from .ReactionSystem import ReactionSystem
