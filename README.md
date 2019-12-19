@@ -36,11 +36,11 @@ Consider the following reaction system:
 
 ![equation](https://latex.codecogs.com/gif.latex?A%20%5Cleftrightarrow%20B%20%5Crightarrow%20C)
 
-Using the Constrain-Based Modeling, the Stoichiometric becomes:
+Using the Constrain-Based Modeling, the Stoichiometric matrix becomes:
 
 ![equation](https://latex.codecogs.com/gif.latex?S%20%3D%20%5Cbegin%7Bbmatrix%7D%20-1%20%26%201%20%26%200%20%5C%5C%201%20%26%20-1%20%26%20-1%20%5C%5C%200%20%26%200%20%26%201%20%5Cend%7Bbmatrix%7D)
 
-A sample code to simulate such system is:
+A sample code to simulate this system is:
 
 
 ```python
