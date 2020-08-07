@@ -124,8 +124,6 @@ class ReactionSystem:
         
         self.max_dt = None
         
-        self.alpha = np.array([0.5],dtype=self.float_type)
-        
         #Simulation
         self.simulation_kernel = None
         self.simulation_data = None
@@ -217,7 +215,7 @@ class ReactionSystem:
     def set_max_dt(self,dt):
         self.max_dt = np.array([dt],dtype=self.float_type)
         
-    def setup_simulation(self,use_opencl=False):
+    def setup_simulation(self,use_opencl=False,alpha=0.5,max_dt=0.1):
         self.simulation_kernel = SimulationCBSA(
                                              self.subV_idx,
                                              self.subV_sto,
@@ -225,8 +223,8 @@ class ReactionSystem:
                                              self.subX_sto,
                                              self.exp_x0,
                                              self.exp_k,
-                                             self.max_dt,
-                                             self.alpha,
+                                             np.array([max_dt],dtype=self.float_type),
+                                             np.array([alpha],dtype=self.float_type),
                                              self.int_type,
                                              self.float_type,
                                              use_opencl

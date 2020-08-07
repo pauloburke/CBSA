@@ -17,6 +17,17 @@ __kernel void replace_and_perm(__global const int *idx, __global const int *sto,
     r[i] = perm(x[idx[i]],sto[i]);
 }
 
+__kernel void column_prod_reduce(__global const int *m,__global const int *width,__global const int *height,__global float *r){
+    int i = get_global_id(0);
+    int w = *width;
+    int h = *height;
+    float v = 1.0;
+    for(int j=0;j<h;j++){
+        v *= m[i+j*w];
+    }
+    r[i] = v;
+}
+
 __kernel void column_prod_reduce_mult_kdt_add_dvnoise(__global const int *m,__global const float *k,__global const float *dv,__global const float *n,__global const float *max_dt,__global const int *width,__global const int *height,__global float *r){
     int i = get_global_id(0);
     int w = *width;
@@ -26,9 +37,8 @@ __kernel void column_prod_reduce_mult_kdt_add_dvnoise(__global const int *m,__gl
     for(int j=0;j<h;j++){
         v *= m[i+j*w];
     }
-    v = v*k[i]*dt+dv[i];
-    v += sqrt(v)*n[i]*sqrt(dt);
-    if(v<0.) v=0.;
+    v = v*k[i]*dt;
+    v = v+(sqrt(v)*n[i])+dv[i];
     r[i] = v;
 }
 
@@ -143,6 +153,7 @@ class SimulationCBSA:
         self.fv = np.zeros_like(self.k,dtype=self.float_type)
         self.tmp_fv = np.zeros_like(self.k,dtype=self.float_type)
         self.dv = np.zeros_like(self.k,dtype=self.float_type)
+        self.tmp_dv = np.zeros_like(self.k,dtype=self.float_type)
         
         self.is_valid_dx = np.array([1],self.int_type)
         
@@ -315,29 +326,24 @@ class SimulationCBSA:
     
     
     def compute_step(self):
+        self.is_valid_dx = False
         dt = self.max_dt
         self.replace_and_perm(self.subV_idx,self.subV_sto,self.x,self.subV_replaced)
-        self.fv = np.prod(self.subV_replaced,axis=0).astype(self.float_type)*self.k*self.max_dt + self.dv
-        noise = np.sqrt(self.fv)*np.random.normal(size=self.fv.size)*np.sqrt(self.max_dt)
-        self.fv = (self.fv+noise).clip(min=0.)
-        self.dv,self.tmp_fv = np.modf(self.fv)
-        self.v = self.tmp_fv.astype(self.int_type)
-        self.replace_and_mult(self.subX_idx,self.subX_sto,self.v,self.subX_replaced)
-        self.dx = np.sum(self.subX_replaced,axis=1)
-        x = (self.x+self.dx)
-        self.is_valid_dx = not np.any(x<0)
-        if not self.is_valid_dx:
-            np.copyto(self.tmp_v, self.v)
-            while not self.is_valid_dx:
-                self.tmp_v = np.floor(self.tmp_v*self.alpha).astype(self.int_type)
-                self.dv = self.dv*self.alpha
-                dt = dt*self.alpha
-                self.replace_and_mult(self.subX_idx,self.subX_sto,self.tmp_v,self.subX_replaced)
-                self.dx = np.sum(self.subX_replaced,axis=1)
-                x = (self.x+self.dx)
-                self.is_valid_dx = not np.any(x<0)
+        self.fv = np.prod(self.subV_replaced,axis=0).astype(self.float_type)*self.k
+        rand = np.random.normal(size=self.fv.size)
+        while not self.is_valid_dx:
+            self.tmp_fv = self.fv*dt
+            self.tmp_fv = self.tmp_fv+np.sqrt(self.tmp_fv)*rand #add noise
+            self.tmp_dv,self.tmp_fv = np.modf(self.tmp_fv+self.dv)
+            self.v = self.tmp_fv.astype(self.int_type)
+            self.replace_and_mult(self.subX_idx,self.subX_sto,self.v,self.subX_replaced)
+            self.dx = np.sum(self.subX_replaced,axis=1)
+            x = (self.x+self.dx)
+            self.is_valid_dx = not np.any(x<0)
+            dt = dt*self.alpha
+        self.dv = self.tmp_dv
         self.x = x
-        
+        dt = dt/self.alpha
         return dt,x
             
     def replace_and_perm(self,idx,sto,x,r):
