@@ -28,25 +28,27 @@ __kernel void column_prod_reduce(__global const int *m,__global const int *width
     r[i] = v;
 }
 
-__kernel void column_prod_reduce_mult_kdt_add_dvnoise(__global const int *m,__global const float *k,__global const float *dv,__global const float *n,__global const float *max_dt,__global const int *width,__global const int *height,__global float *r){
+__kernel void add_noise(__global const float *fv,__global const float *n,__global float *r){
+    int i = get_global_id(0);
+    r[i] = fv[i]+(sqrt(fv[i])*n[i]);
+}
+
+__kernel void column_prod_reduce_mult_k(__global const int *m,__global const float *k,__global const int *width,__global const int *height,__global float *r){
     int i = get_global_id(0);
     int w = *width;
     int h = *height;
-    float dt = *max_dt;
     float v = 1.0;
     for(int j=0;j<h;j++){
-        v *= m[i+j*w];
+        v *= (float) m[i+j*w];
     }
-    v = v*k[i]*dt;
-    v = v+(sqrt(v)*n[i])+dv[i];
-    r[i] = v;
+    r[i] = v*k[i];
 }
 
 
 __kernel void separate_int_float(__global const float *fv,__global int *v,__global float *dv){
     int i = get_global_id(0);
     v[i] = (int) fv[i];
-    dv[i] = fv[i] - v[i];
+    dv[i] = fv[i] - (float) v[i];
 }
 
 __kernel void replace_and_mult(__global const int *idv, __global const int *sto, __global const int *v, __global int *r){
@@ -66,15 +68,20 @@ __kernel void row_sum_reduce(__global const int *m,__global const int *width,__g
     r[i] = sum;
 }
 
-__kernel void is_valid_dx(__global const int *x,__global const int *dx,__global int *r){
+__kernel void is_not_valid_dx(__global const int *x,__global const int *dx,__global int *r){
     int i = get_global_id(0);
-    if(-dx[i]>x[i]) *r = 0;
+    if(-dx[i]>x[i]) *r = 1;
 }
 
 __kernel void set_true(__global int *r){
-    *r = 1;
+    int i = get_global_id(0);
+    r[i] = 1;
 }
 
+__kernel void set_false(__global int *r){
+    int i = get_global_id(0);
+    r[i] = 0;
+}
 
 __kernel void sum_copy_buffer(__global const int *x,__global const int *y,__global int *r,__global int *buff){
     int i = get_global_id(0);
@@ -104,6 +111,16 @@ __kernel void copy(__global const int *from,__global int *to){
 __kernel void fmult(__global const float *a,__global const float *b,__global float *r){
     int i = get_global_id(0);
     r[i] = a[i]*b[i];
+}
+
+__kernel void fsum(__global const float *a,__global const float *b,__global float *r){
+    int i = get_global_id(0);
+    r[i] = a[i]+b[i];
+}
+
+__kernel void fdivide(__global const float *a,__global const float *b,__global float *r){
+    int i = get_global_id(0);
+    r[i] = a[i]/b[i];
 }
 
 """
@@ -156,6 +173,7 @@ class SimulationCBSA:
         self.tmp_dv = np.zeros_like(self.k,dtype=self.float_type)
         
         self.is_valid_dx = np.array([1],self.int_type)
+        self.is_not_valid_dx = np.array([1],self.int_type)
         
         self.dt = np.array([0.0],dtype=self.float_type)
         
@@ -212,13 +230,14 @@ class SimulationCBSA:
         self.d_fv = self.cl.Buffer(self.ctx, self.mf.READ_WRITE| self.mf.COPY_HOST_PTR, hostbuf=self.fv)
         self.d_tmp_fv = self.cl.Buffer(self.ctx, self.mf.READ_WRITE| self.mf.COPY_HOST_PTR, hostbuf=self.tmp_fv)
         self.d_dv = self.cl.Buffer(self.ctx, self.mf.READ_WRITE | self.mf.COPY_HOST_PTR, hostbuf=self.dv)
+        self.d_tmp_dv = self.cl.Buffer(self.ctx, self.mf.READ_WRITE | self.mf.COPY_HOST_PTR, hostbuf=self.dv)
         
         self.d_subV_height = self.cl.Buffer(self.ctx, self.mf.READ_ONLY | self.mf.COPY_HOST_PTR, hostbuf=self.int_type(self.subV_sto.shape[0]))
         self.d_subV_width = self.cl.Buffer(self.ctx, self.mf.READ_ONLY | self.mf.COPY_HOST_PTR, hostbuf=self.int_type(self.subV_sto.shape[1]))
         self.d_subX_height = self.cl.Buffer(self.ctx, self.mf.READ_ONLY | self.mf.COPY_HOST_PTR, hostbuf=self.int_type(self.subX_sto.shape[0]))
         self.d_subX_width = self.cl.Buffer(self.ctx, self.mf.READ_ONLY | self.mf.COPY_HOST_PTR, hostbuf=self.int_type(self.subX_sto.shape[1]))
         
-        self.d_is_valid_dx = self.cl.Buffer(self.ctx, self.mf.READ_WRITE | self.mf.COPY_HOST_PTR, hostbuf=self.is_valid_dx)
+        self.d_is_not_valid_dx = self.cl.Buffer(self.ctx, self.mf.READ_WRITE | self.mf.COPY_HOST_PTR, hostbuf=self.is_not_valid_dx)
         self.d_max_dt = self.cl.Buffer(self.ctx, self.mf.READ_ONLY | self.mf.COPY_HOST_PTR, hostbuf=self.max_dt)
         self.d_dt = self.cl.Buffer(self.ctx, self.mf.READ_WRITE | self.mf.COPY_HOST_PTR, hostbuf=self.dt)
         self.d_alpha = self.cl.Buffer(self.ctx, self.mf.READ_ONLY | self.mf.COPY_HOST_PTR, hostbuf=self.alpha)
@@ -263,7 +282,7 @@ class SimulationCBSA:
             np.savetxt(f,self.x.reshape((1,self.n_molecules[0])),delimiter=' ',fmt=write_format)
         #Compute
         while(time<total_time):
-
+            
             dt,x = self.compute_batch_steps(batch_steps,x_buffer)
             time += dt
             #print(dt)
@@ -292,36 +311,53 @@ class SimulationCBSA:
         return np.sum(dt),x_buffer
         
     def compute_step_opencl(self,x_buffer,dt_buffer,get_vals):
-        ev0 = self.pgr.copy(self.queue2,self.n_one, None,self.d_max_dt,self.d_dt)
-        ev1 = self.pgr.replace_and_perm(self.queue1, self.subV_n_elements, None ,self.d_subV_idx,self.d_subV_sto,self.d_x,self.d_subV_replaced)
-        ev2 = self.pgr.column_prod_reduce_mult_kdt_add_dvnoise(self.queue1, self.n_reactions, None ,self.d_subV_replaced,self.d_k,self.d_dv,self.d_rand.data,self.d_max_dt,self.d_subV_width,self.d_subV_height,self.d_fv)
-        ev5 = self.pgr.separate_int_float(self.queue1, self.n_reactions, None ,self.d_fv,self.d_v,self.d_dv)        
-        ev6 = self.pgr.replace_and_mult(self.queue1, self.subX_n_elements, None ,self.d_subX_idx,self.d_subX_sto,self.d_v,self.d_subX_replaced)
-        ev7 = self.pgr.row_sum_reduce(self.queue1, self.n_molecules, None ,self.d_subX_replaced,self.d_subX_width,self.d_subX_height,self.d_dx)
-        ev8 = self.pgr.set_true(self.queue2,self.n_one, None,self.d_is_valid_dx)
-        ev9 = self.pgr.is_valid_dx(self.queue1, self.n_molecules, None ,self.d_x,self.d_dx,self.d_is_valid_dx,wait_for=[ev7,ev8])
-        ev10 = self.cl.enqueue_copy(self.queue_transfer, self.is_valid_dx, self.d_is_valid_dx,wait_for=[ev9])
-        self.cl.enqueue_barrier(self.queue_transfer)
-        if(not self.is_valid_dx):
-            ev_g0 = self.pgr.copy(self.queue1, self.n_reactions, None ,self.d_v,self.d_tmp_v)
-            self.ev_rand = self.rand_gen.fill_uniform(self.d_rand,queue=self.queue2)
-            while(not self.is_valid_dx):
-                ev_g0 = self.pgr.fmult(self.queue2, self.n_one, None ,self.d_dt,self.d_alpha,self.d_dt)
-                ev_g1 = self.pgr.mult_scalar_floor(self.queue1, self.n_reactions, None ,self.d_tmp_v,self.d_alpha,self.d_tmp_v)
-                ev_g11 = self.pgr.mult_scalar(self.queue2, self.n_reactions, None ,self.d_dv,self.d_alpha,self.d_dv)
-                ev_g3 = self.pgr.replace_and_mult(self.queue1, self.subX_n_elements, None ,self.d_subX_idx,self.d_subX_sto,self.d_tmp_v,self.d_subX_replaced)
-                ev_g4 = self.pgr.row_sum_reduce(self.queue1, self.n_molecules, None ,self.d_subX_replaced,self.d_subX_width,self.d_subX_height,self.d_dx)
-                ev_g5 = self.pgr.set_true(self.queue1,self.n_one, None,self.d_is_valid_dx)
-                ev_g6 = self.pgr.is_valid_dx(self.queue1, self.n_molecules, None ,self.d_x,self.d_dx,self.d_is_valid_dx,wait_for=[ev_g4,ev_g5])
-                ev_g7 = self.cl.enqueue_copy(self.queue_transfer, self.is_valid_dx, self.d_is_valid_dx,wait_for=[ev_g6])
-                ev_g7.wait()
-            transf = self.cl.enqueue_copy(self.queue_transfer, dt_buffer, self.d_dt,wait_for=[ev_g0])
+        #set variable to true
+        self.is_not_valid_dx = np.array([1],self.int_type)
+        #set dt to max_dt
+        ev1 = self.pgr.copy(self.queue2,self.n_one, None,self.d_max_dt,self.d_dt)
+        #Replace x values and permutate
+        ev2 = self.pgr.replace_and_perm(self.queue1, self.subV_n_elements, None ,self.d_subV_idx,self.d_subV_sto,self.d_x,self.d_subV_replaced)
+        #product reduce columns from subistituted and permutated x and multiply by constant k
+        ev3 = self.pgr.column_prod_reduce_mult_k(self.queue1, self.n_reactions, None ,self.d_subV_replaced,self.d_k,self.d_subV_width,self.d_subV_height,self.d_fv)
+        #while not valid dx (or the first time)
+        while(self.is_not_valid_dx):
+            #multiply fv by dt
+            ev4 = self.pgr.mult_scalar(self.queue1, self.n_reactions, None ,self.d_fv,self.d_dt,self.d_tmp_fv)
+            #add noise
+            ev5 = self.pgr.add_noise(self.queue1, self.n_reactions, None ,self.d_tmp_fv,self.d_rand.data,self.d_tmp_fv)
+            #sum dv to fv
+            ev6 = self.pgr.fsum(self.queue1, self.n_reactions, None ,self.d_tmp_fv,self.d_dv,self.d_tmp_fv)
+            #separate int and float parts
+            ev7 = self.pgr.separate_int_float(self.queue1, self.n_reactions, None ,self.d_tmp_fv,self.d_v,self.d_tmp_dv)
+            #replace v and muliply
+            ev8 = self.pgr.replace_and_mult(self.queue1, self.subX_n_elements, None ,self.d_subX_idx,self.d_subX_sto,self.d_v,self.d_subX_replaced)
+            #row sum reduce to compute dx
+            ev9 = self.pgr.row_sum_reduce(self.queue1, self.n_molecules, None ,self.d_subX_replaced,self.d_subX_width,self.d_subX_height,self.d_dx)
+            #set is_not_valid_dx to false (assumes it is right)
+            ev10 = self.pgr.set_false(self.queue2,self.n_one, None,self.d_is_not_valid_dx)
+            #check if any dx is not valid
+            ev11 = self.pgr.is_not_valid_dx(self.queue1, self.n_molecules, None ,self.d_x,self.d_dx,self.d_is_not_valid_dx,wait_for=[ev10])
+            #makes dt = dt*alpha
+            ev12 = self.pgr.fmult(self.queue2, self.n_one, None ,self.d_dt,self.d_alpha,self.d_dt)
+            #copy is_not_valid_dx to host
+            ev13 = self.cl.enqueue_copy(self.queue_transfer, self.is_not_valid_dx,self.d_is_not_valid_dx,wait_for=[ev10])
+            ev13.wait()
+        # set dv = tmp_dv
+        ev14 = self.pgr.copy(self.queue1,self.n_reactions, None,self.d_tmp_dv,self.d_dv)
+        # make x = x+dx and copy to buffer
+        ev15 = self.pgr.sum_copy_buffer(self.queue2, self.n_molecules, None ,self.d_x,self.d_dx,self.d_x,self.d_x_buff)
+        # make dt = dt/alpha
+        ev16 = self.pgr.fdivide(self.queue1, self.n_one, None ,self.d_dt,self.d_alpha,self.d_dt)
+        #copy dt to host buffer
+        self.cl.enqueue_copy(self.queue_transfer, dt_buffer, self.d_dt,wait_for=[ev16])
+        if get_vals:
+            #copy x to host buffer
+            transf = self.cl.enqueue_copy(self.queue_transfer, x_buffer, self.d_x_buff)
+        #generate new random numbers
+        self.ev_rand = self.rand_gen.fill_normal(self.d_rand,queue=self.queue1)
+        #wait all queues
         self.cl.enqueue_barrier(self.queue1)
         self.cl.enqueue_barrier(self.queue2)
-        ev12 = self.pgr.sum_copy_buffer(self.queue1, self.n_molecules, None ,self.d_x,self.d_dx,self.d_x,self.d_x_buff)
-        if get_vals:
-            transf2 = self.cl.enqueue_copy(self.queue_transfer, x_buffer, self.d_x_buff,wait_for=[ev12])
-        self.ev_rand = self.rand_gen.fill_normal(self.d_rand,queue=self.queue2)
     
     
     
@@ -350,9 +386,9 @@ class SimulationCBSA:
         for index, x_idx in np.ndenumerate(idx):
             r[index] = self.perm(x[x_idx],sto[index])
     
-    def replace_and_mult(self,idx,sto,x,r):
+    def replace_and_mult(self,idx,sto,v,r):
         for index, x_idx in np.ndenumerate(idx):
-            r[index] = x[x_idx]*sto[index]
+            r[index] = v[x_idx]*sto[index]
         
     def perm(self,a,b):    
         if(not b): return 1
