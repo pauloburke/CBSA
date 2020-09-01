@@ -5,7 +5,7 @@ with open("README.md", "r") as fh:
 
 setuptools.setup(
     name="cbsa",
-    version="0.0.3",
+    version="0.0.4",
     author="Paulo Burke",
     author_email="pauloepburke@gmail.com",
     description="A Python package to simulate biochemical systems using the Constraint-Based Simulation Algorithm",
