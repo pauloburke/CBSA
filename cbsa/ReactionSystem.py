@@ -189,6 +189,9 @@ class ReactionSystem:
         for i in range(copies):
             self.exp_x0 = np.concatenate((self.exp_x0,to_copy))
             
+    def get_x(self):
+        return self.x0
+            
     def set_k(self, k,diff_k=None):
         self.check_setup()
         self.k = np.array(k,dtype=self.float_type)

@@ -340,7 +340,7 @@ class SimulationCBSA:
             #makes dt = dt*alpha
             ev12 = self.pgr.fmult(self.queue2, self.n_one, None ,self.d_dt,self.d_alpha,self.d_dt)
             #copy is_not_valid_dx to host
-            ev13 = self.cl.enqueue_copy(self.queue_transfer, self.is_not_valid_dx,self.d_is_not_valid_dx,wait_for=[ev10])
+            ev13 = self.cl.enqueue_copy(self.queue_transfer, self.is_not_valid_dx,self.d_is_not_valid_dx,wait_for=[ev11])
             ev13.wait()
         # set dv = tmp_dv
         ev14 = self.pgr.copy(self.queue1,self.n_reactions, None,self.d_tmp_dv,self.d_dv)
