@@ -81,6 +81,7 @@ plt.show()
 
 ![example 1 image](docs/images/example_1.png)
 
+To run the algorithm using your GPU, set use_opencl=True. It will require the python package pyopencl.
 
 License
 -------
