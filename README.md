@@ -44,7 +44,7 @@ A sample code to simulate this system is:
 
 
 ```python
-import cbsa
+from cbsa import ReactionSystem
 import matplotlib.pyplot as plt
 import numpy as np
 
@@ -52,24 +52,29 @@ S = [[-1, 1, 0],
      [ 1,-1,-1],
      [ 0, 0, 1]]
 
-init_mols = [50,0,0]
+R = [[0,0,0],
+     [0,0,0],
+     [0,0,0]]
+
+x0 = [50,0,0]
 k = [0.5,0.1,0.8]
 max_dt = 0.1
+alpha=0.5
 total_sim_time = 10
 
-sim = cbsa.ReactionSystem(S)
-sim.setup()
-sim.set_x(init_mols)
-sim.set_k(k)
-sim.set_max_dt(max_dt)
+cbsa = ReactionSystem(S,R)
 
-sim.setup_simulation()
-sim.compute_simulation(total_sim_time)
-sim_data = np.array(sim.simulation_data)
+cbsa.setup()
+cbsa.set_x(x0)
+cbsa.set_k(k)
 
-plt.plot(sim_data[:,0],sim_data[:,1],label="A")
-plt.plot(sim_data[:,0],sim_data[:,2],label="B")
-plt.plot(sim_data[:,0],sim_data[:,3],label="C")
+cbsa.setup_simulation(use_opencl=False,alpha=alpha,max_dt=max_dt)
+cbsa.compute_simulation(total_sim_time)
+cbsa_data = np.array(cbsa.simulation_data)
+
+plt.plot(cbsa_data[:,0],cbsa_data[:,1],label="A")
+plt.plot(cbsa_data[:,0],cbsa_data[:,2],label="B")
+plt.plot(cbsa_data[:,0],cbsa_data[:,3],label="C")
 plt.legend()
 plt.show()
 ```
